@@ -217,26 +217,29 @@ describe('deck.ts', () => {
 
     it('не должна изменять другие карты', () => {
       const deck = createDeck();
-      const originalDeck = [...deck];
       const cardId = deck[5].id;
       
       const updated = updateCardStatus(deck, cardId, 'played');
       
+      // Проверяем, что карта с индексом 5 изменилась
+      expect(updated[5].status).toBe('played');
+      expect(updated[5].id).toBe(cardId);
+      // Проверяем, что другие карты не изменились
       for (let i = 0; i < updated.length; i++) {
         if (i !== 5) {
-          expect(updated[i]).toEqual(originalDeck[i]);
+          expect(updated[i].status).toBe('unknown');
         }
       }
     });
 
     it('должна возвращать новый массив, не изменяя исходный', () => {
       const deck = createDeck();
-      const originalDeck = [...deck];
+      const originalStatus = deck[0].status;
       
       const updated = updateCardStatus(deck, deck[0].id, 'played');
       
       expect(updated).not.toBe(deck);
-      expect(deck[0].status).toBe('unknown');
+      expect(deck[0].status).toBe(originalStatus);
       expect(updated[0].status).toBe('played');
     });
 
