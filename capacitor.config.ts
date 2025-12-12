@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.durak.cardtracker',
-  appName: 'Трекер карт - Дурак',
+  appName: 'Durak Card Tracker',
   webDir: 'dist',
   server: {
     android: {
@@ -15,4 +15,5 @@ const config: CapacitorConfig = {
 };
 
 export default config;
+
 
