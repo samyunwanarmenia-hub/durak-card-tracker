@@ -47,6 +47,26 @@ function App() {
     }
   }, [cards, isLoading]);
 
+  // Сохранение состояния при уходе приложения в фон (для быстрого переключения)
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.hidden && !isLoading) {
+        // Сохраняем состояние когда приложение уходит в фон
+        try {
+          await saveGameState(cards);
+        } catch (error) {
+          console.error('Ошибка при сохранении при уходе в фон:', error);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [cards, isLoading]);
+
   // Обработчик изменения статуса карты
   const handleCardStatusChange = useCallback(
     (cardId: string, newStatus: CardStatus) => {
