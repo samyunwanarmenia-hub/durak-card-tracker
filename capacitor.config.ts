@@ -12,6 +12,12 @@ const config: CapacitorConfig = {
       contentInset: 'automatic',
     },
   },
+  // Оптимизация для быстрого переключения между приложениями
+  plugins: {
+    Preferences: {
+      // Автосохранение при переключении приложений
+    },
+  },
 };
 
 export default config;
