@@ -32,3 +32,4 @@ echo "3. Перейдите в Actions → iOS Build → Run workflow"
 echo ""
 echo "Подробные инструкции в GITHUB_SETUP.md"
 
+

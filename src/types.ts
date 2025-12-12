@@ -30,3 +30,4 @@ export interface Card {
   status: CardStatus;
 }
 
+

@@ -39,3 +39,4 @@ export function NewGameButton({ onNewGame }: NewGameButtonProps) {
   );
 }
 
+

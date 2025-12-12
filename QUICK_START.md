@@ -66,3 +66,4 @@ git push -u origin main
 - Задеплойте на Vercel/Netlify
 - Работает в браузере на любом устройстве
 
+
