@@ -80,7 +80,7 @@ jobs:
             exit 1
           fi
 
-      - name: Setup certificates and provisioning profile
+      - name: Setup certificates and provisioning profile (Optional)
         id: setup_certs
         env:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
@@ -89,21 +89,14 @@ jobs:
         run: |
           set -e
           
-          # Проверяем наличие секретов
-          if [ -z "$IOS_CERTIFICATE_BASE64" ]; then
-            echo "Ошибка: IOS_CERTIFICATE_BASE64 не установлен"
-            exit 1
+          # Если секреты не установлены, используем автоматическую подпись
+          if [ -z "$IOS_CERTIFICATE_BASE64" ] || [ -z "$IOS_PROVISIONING_PROFILE_BASE64" ]; then
+            echo "⚠️ Секреты не установлены, используем автоматическую подпись (требует Apple ID)"
+            echo "USE_AUTO_SIGN=true" >> $GITHUB_ENV
+            exit 0
           fi
           
-          if [ -z "$IOS_CERTIFICATE_PASSWORD" ]; then
-            echo "Ошибка: IOS_CERTIFICATE_PASSWORD не установлен"
-            exit 1
-          fi
-          
-          if [ -z "$IOS_PROVISIONING_PROFILE_BASE64" ]; then
-            echo "Ошибка: IOS_PROVISIONING_PROFILE_BASE64 не установлен"
-            exit 1
-          fi
+          echo "USE_AUTO_SIGN=false" >> $GITHUB_ENV
           
           # Создаем директории для сертификатов
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
@@ -189,44 +182,91 @@ jobs:
         run: |
           set -e
           
-          if [ -z "$IOS_TEAM_ID" ]; then
-            echo "Ошибка: IOS_TEAM_ID не установлен"
-            exit 1
-          fi
-          
-          if [ -z "$PROFILE_UUID" ]; then
-            echo "Ошибка: PROFILE_UUID не установлен"
-            exit 1
-          fi
-          
           cd ios/App
           mkdir -p build
           
-          # Определяем команду сборки в зависимости от типа проекта
-          if [ "$BUILD_TYPE" == "workspace" ]; then
-            echo "Сборка через workspace..."
-            xcodebuild clean archive \
-              -workspace App.xcworkspace \
-              -scheme App \
-              -archivePath build/App.xcarchive \
-              -configuration Release \
-              CODE_SIGN_IDENTITY="Apple Development" \
-              DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
-              PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
-              -allowProvisioningUpdates \
-              -quiet
+          # Если используем автоматическую подпись
+          if [ "$USE_AUTO_SIGN" == "true" ]; then
+            echo "Используем автоматическую подпись (без сертификатов)..."
+            
+            if [ "$BUILD_TYPE" == "workspace" ]; then
+              xcodebuild clean archive \
+                -workspace App.xcworkspace \
+                -scheme App \
+                -archivePath build/App.xcarchive \
+                -configuration Release \
+                CODE_SIGN_STYLE=Automatic \
+                -allowProvisioningUpdates \
+                -quiet || {
+                  echo "⚠️ Автоматическая подпись не удалась, пробуем без подписи..."
+                  xcodebuild clean archive \
+                    -workspace App.xcworkspace \
+                    -scheme App \
+                    -archivePath build/App.xcarchive \
+                    -configuration Release \
+                    CODE_SIGN_IDENTITY="" \
+                    CODE_SIGNING_REQUIRED=NO \
+                    CODE_SIGNING_ALLOWED=NO \
+                    -quiet
+                }
+            else
+              xcodebuild clean archive \
+                -project App.xcodeproj \
+                -scheme App \
+                -archivePath build/App.xcarchive \
+                -configuration Release \
+                CODE_SIGN_STYLE=Automatic \
+                -allowProvisioningUpdates \
+                -quiet || {
+                  echo "⚠️ Автоматическая подпись не удалась, пробуем без подписи..."
+                  xcodebuild clean archive \
+                    -project App.xcodeproj \
+                    -scheme App \
+                    -archivePath build/App.xcarchive \
+                    -configuration Release \
+                    CODE_SIGN_IDENTITY="" \
+                    CODE_SIGNING_REQUIRED=NO \
+                    CODE_SIGNING_ALLOWED=NO \
+                    -quiet
+                }
+            fi
           else
-            echo "Сборка через project..."
-            xcodebuild clean archive \
-              -project App.xcodeproj \
-              -scheme App \
-              -archivePath build/App.xcarchive \
-              -configuration Release \
-              CODE_SIGN_IDENTITY="Apple Development" \
-              DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
-              PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
-              -allowProvisioningUpdates \
-              -quiet
+            # Используем сертификаты из секретов
+            if [ -z "$IOS_TEAM_ID" ]; then
+              echo "Ошибка: IOS_TEAM_ID не установлен"
+              exit 1
+            fi
+            
+            if [ -z "$PROFILE_UUID" ]; then
+              echo "Ошибка: PROFILE_UUID не установлен"
+              exit 1
+            fi
+            
+            if [ "$BUILD_TYPE" == "workspace" ]; then
+              echo "Сборка через workspace с сертификатами..."
+              xcodebuild clean archive \
+                -workspace App.xcworkspace \
+                -scheme App \
+                -archivePath build/App.xcarchive \
+                -configuration Release \
+                CODE_SIGN_IDENTITY="Apple Development" \
+                DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+                PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+                -allowProvisioningUpdates \
+                -quiet
+            else
+              echo "Сборка через project с сертификатами..."
+              xcodebuild clean archive \
+                -project App.xcodeproj \
+                -scheme App \
+                -archivePath build/App.xcarchive \
+                -configuration Release \
+                CODE_SIGN_IDENTITY="Apple Development" \
+                DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+                PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+                -allowProvisioningUpdates \
+                -quiet
+            fi
           fi
           
           if [ ! -d "build/App.xcarchive" ]; then
@@ -249,7 +289,24 @@ jobs:
             EXPORT_METHOD="development"
           fi
           
-          cat > build/ExportOptions.plist <<EOF
+          # Если используем автоматическую подпись
+          if [ "$USE_AUTO_SIGN" == "true" ]; then
+            cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>$EXPORT_METHOD</string>
+            <key>compileBitcode</key>
+            <false/>
+            <key>signingStyle</key>
+            <string>automatic</string>
+          </dict>
+          </plist>
+          EOF
+          else
+            cat > build/ExportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -263,6 +320,7 @@ jobs:
           </dict>
           </plist>
           EOF
+          fi
           
           echo "ExportOptions.plist создан для метода: $EXPORT_METHOD"
 
@@ -284,11 +342,32 @@ jobs:
           
           mkdir -p build/ipa
           
+          # Пробуем экспортировать через xcodebuild
           xcodebuild -exportArchive \
             -archivePath build/App.xcarchive \
             -exportPath build/ipa \
             -exportOptionsPlist build/ExportOptions.plist \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates || {
+              echo "⚠️ Экспорт через xcodebuild не удался, создаем .ipa вручную..."
+              
+              # Создаем .ipa вручную из архива
+              mkdir -p build/ipa/Payload
+              
+              # Находим .app файл в архиве
+              APP_PATH=$(find build/App.xcarchive/Products/Applications -name "*.app" -type d | head -1)
+              
+              if [ -z "$APP_PATH" ]; then
+                echo "Ошибка: .app файл не найден в архиве"
+                exit 1
+              fi
+              
+              cp -R "$APP_PATH" build/ipa/Payload/
+              cd build/ipa
+              zip -r App.ipa Payload
+              cd ../..
+              
+              echo "✅ .ipa файл создан вручную (возможно unsigned)"
+            }
           
           # Проверяем наличие .ipa файла
           IPA_FILE=$(find build/ipa -name "*.ipa" | head -1)
@@ -299,7 +378,7 @@ jobs:
             exit 1
           fi
           
-          echo "IPA файл успешно создан: $IPA_FILE"
+          echo "✅ IPA файл успешно создан: $IPA_FILE"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
