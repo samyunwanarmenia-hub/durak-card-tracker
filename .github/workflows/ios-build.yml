@@ -1,0 +1,128 @@
+name: iOS Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Тип сборки'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - ad-hoc
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Install Capacitor CLI
+        run: npm install -g @capacitor/cli
+
+      - name: Add iOS platform
+        run: npx cap add ios
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+
+      - name: Setup certificates and provisioning profile
+        id: setup_certs
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          # Создаем директорию для сертификатов
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          mkdir -p ~/certificates
+
+          # Декодируем и устанавливаем сертификат разработчика
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode > ~/certificates/certificate.p12
+          
+          # Создаем keychain для сертификата
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          # Импортируем сертификат
+          security import ~/certificates/certificate.p12 -k build.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+
+          # Декодируем и устанавливаем provisioning profile
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > ~/certificates/profile.mobileprovision
+          
+          # Получаем UUID из provisioning profile
+          UUID=$(grep -aA1 UUID ~/certificates/profile.mobileprovision | grep -o "[-A-Z0-9]\{36\}")
+          echo "PROFILE_UUID=$UUID" >> $GITHUB_ENV
+          
+          # Копируем provisioning profile в нужную директорию
+          cp ~/certificates/profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+
+      - name: Build iOS app
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          cd ios/App
+          xcodebuild clean archive \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -archivePath build/App.xcarchive \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="Apple Development" \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID"
+
+      - name: Create export options plist
+        run: |
+          cd ios/App
+          if [ "${{ github.event.inputs.build_type }}" == "ad-hoc" ]; then
+            EXPORT_METHOD="ad-hoc"
+          else
+            EXPORT_METHOD="development"
+          fi
+          
+          cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>$EXPORT_METHOD</string>
+            <key>teamID</key>
+            <string>${{ secrets.IOS_TEAM_ID }}</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Export IPA
+        run: |
+          cd ios/App
+          xcodebuild -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportPath build/ipa \
+            -exportOptionsPlist build/ExportOptions.plist
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app
+          path: ios/App/build/ipa/*.ipa
+          retention-days: 30
+

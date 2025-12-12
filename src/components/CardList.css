@@ -1,0 +1,87 @@
+.card-list {
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.card-list-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.card-suit-group {
+  margin-bottom: 24px;
+}
+
+.card-suit-group:last-child {
+  margin-bottom: 0;
+}
+
+.card-suit-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #666;
+}
+
+.card-suit-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.card-name {
+  font-size: 18px;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.card-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.card-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  background: #e0e0e0;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-button:hover {
+  background: #d0d0d0;
+}
+
+.card-button.active {
+  background: #4caf50;
+  color: white;
+  font-weight: 600;
+}
+
+.card-button.active[title='Сыграна'] {
+  background: #ff9800;
+}
+
+.card-button.active[title='Моя'] {
+  background: #2196f3;
+}
+
